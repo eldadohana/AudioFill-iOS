@@ -1,0 +1,36 @@
+PODS:
+  - PlainPocketFFT (0.0.9)
+  - PocketFFT (0.0.1)
+  - RosaKit (0.0.11):
+    - PlainPocketFFT (~> 0.0.9)
+    - PocketFFT (~> 0.0.1)
+  - TensorFlowLiteC (2.14.0):
+    - TensorFlowLiteC/Core (= 2.14.0)
+  - TensorFlowLiteC/Core (2.14.0)
+  - TensorFlowLiteSwift (2.14.0):
+    - TensorFlowLiteSwift/Core (= 2.14.0)
+  - TensorFlowLiteSwift/Core (2.14.0):
+    - TensorFlowLiteC (= 2.14.0)
+
+DEPENDENCIES:
+  - RosaKit
+  - TensorFlowLiteSwift
+
+SPEC REPOS:
+  trunk:
+    - PlainPocketFFT
+    - PocketFFT
+    - RosaKit
+    - TensorFlowLiteC
+    - TensorFlowLiteSwift
+
+SPEC CHECKSUMS:
+  PlainPocketFFT: 3763f37fba0737e457ed1a3b9b7bfa70c00ff213
+  PocketFFT: cdbe7ef5b7cd08520655d85d03d701b5ba35fdec
+  RosaKit: 6e28b09f5eb990148a401e0c4b4ff0c207bd6569
+  TensorFlowLiteC: a836de9b6e6018665ccc349538bdd2c3b80dd7a5
+  TensorFlowLiteSwift: f706b143b69d7bf433aba7b08049bdd11c321a10
+
+PODFILE CHECKSUM: 3f9c132bea8bb3babb893e9dcdda027ffe11d5b1
+
+COCOAPODS: 1.15.2
