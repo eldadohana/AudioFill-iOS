@@ -13,6 +13,14 @@ class RecordingViewModel: ObservableObject {
         case idle
         case recording
         case full
+        case error(RecordingViewModelError)
+    }
+    
+    enum RecordingViewModelError: Error {
+        case audioRecordingFailure
+        case audioProcessingFailure
+        case predictionFailure
+        case unknownError
     }
     
     @Published var isRecording: Bool = false
@@ -20,72 +28,104 @@ class RecordingViewModel: ObservableObject {
     @Published var viewState: ViewState = .idle
     
     private let audioRecorder: AudioRecorderWithEngine = .init()
-    private var timer: Timer?
     private let audioML: AudioML = .init()
     private let fullStateThreshold = 85
+    private var predictionTask: Task<Void, Never>?
+
     
     func recordingButtonTap() {
         if isRecording {
-            stopRecording()
-            viewState = .idle
+            stopProcess()
+            updateUIState(to: .idle)
         }
         else {
-            startRecording()
-            viewState = .recording
+            startProcess()
+            updateUIState(to: .recording)
         }
-        isRecording = !isRecording
     }
 }
 
 private extension RecordingViewModel {
     
-    func startRecording() {
-        self.currentPercentage = 0
-        audioRecorder.startRecording()
-        makePredictionEvery(seconds: 3)
+    func startProcess() {
+        Task {
+            await MainActor.run {
+                currentPercentage = 0
+                isRecording = true
+            }
+            do {
+                try await audioRecorder.startRecording()
+                makePrediction(every: 3)
+            } catch {
+                handleError(error)
+            }
+        }
     }
     
-    func stopRecording() {
-        timer?.invalidate()
-        timer = nil
+    func stopProcess() {
+        stopPredictions()
         audioRecorder.stopRecording()
+        Task { @MainActor in
+            isRecording = false
+        }
     }
     
-    func predictFullState() async -> Float? {
-        guard let rawAudio = audioRecorder.getCurrentRecording() else {
-            return nil
-        }
-        print("Pulling raw audio of size: \(rawAudio.count)")
-        guard let inputData = AudioUtils.rawAudioToDataUsingFloatArray(rawAudio) else {
-            print("Couldn't convert raw audio to data")
-            return nil
-        }
-        return try? await self.audioML.predictionForAudioBuffer(inputData)
-    }
-    
-    func makePredictionEvery(seconds: TimeInterval) {
-        self.timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { _ in
-            Task {
-                guard let prediction = await self.predictFullState() else {
-                    return
-                }
-                if !prediction.isNaN {
-                    DispatchQueue.main.async {
-//                        self.currentPercentage = Int(prediction * 100)
-                        self.currentPercentage += 10
-                        // Detecting full state
-                        if self.currentPercentage >= self.fullStateThreshold {
-                            self.reachedToFullState()
+    func makePrediction(every seconds: TimeInterval) {
+        predictionTask = Task {
+            while !Task.isCancelled {
+                do {
+                    let prediction = try await self.predictState()
+                    if !prediction.isNaN {
+                        let percentage = Int(prediction * 100)
+                        await MainActor.run {
+                            self.currentPercentage = percentage
+                            if self.currentPercentage >= self.fullStateThreshold {
+                                self.reachedToFullState()
+                            }
                         }
                     }
+                    try? await Task.sleep(for: .seconds(seconds))
+                }
+                catch {
+                    handleError(error)
                 }
             }
         }
     }
     
+    func stopPredictions() {
+        predictionTask?.cancel()
+        predictionTask = nil
+    }
+    
+    func predictState() async throws -> Float {
+        guard let rawAudio = audioRecorder.getCurrentRecording() else {
+            throw RecordingViewModelError.audioRecordingFailure
+        }
+        guard let inputData = AudioUtils.rawAudioToDataUsingFloatArray(rawAudio) else {
+            throw RecordingViewModelError.audioProcessingFailure
+        }
+        do {
+            return try await self.audioML.predictionForAudioBuffer(inputData)
+        } catch {
+            throw RecordingViewModelError.predictionFailure
+        }
+    }
+    
     func reachedToFullState() {
-        stopRecording()
-        isRecording = false
-        viewState = .full
+        stopProcess()
+        updateUIState(to: .full)
+    }
+    
+    func handleError(_ error: Error) {
+        stopProcess()
+        let recordingError = (error as? RecordingViewModelError) ?? .unknownError
+        updateUIState(to: .error(recordingError))
+    }
+        
+    func updateUIState(to state: ViewState) {
+        Task { @MainActor in
+            self.viewState = state
+        }
     }
 }

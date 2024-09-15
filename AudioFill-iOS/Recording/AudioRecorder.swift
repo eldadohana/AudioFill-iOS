@@ -10,28 +10,36 @@ import AVFoundation
 
 class AudioRecorderWithEngine: NSObject {
     
-    let queue: DispatchQueue = .init(label: "Recording.queue", qos: .userInitiated)
     let bufferSize: AVAudioFrameCount = 1024
     var engine: AVAudioEngine = .init()
     var currentRecorded: [Double] = .init()
     var audioPlayer: AVAudioPlayer?
     
-    func startRecording() {
-        queue.async {
-            self.currentRecorded = .init()
-            let format = self.engine.inputNode.inputFormat(forBus: 0)
-            self.engine.inputNode.installTap(onBus: 0,
-                                             bufferSize: self.bufferSize,
-                                             format: format) { (buffer, time) -> Void in
-                self.currentRecorded = self.currentRecorded.append(buffer: buffer)
+    func startRecording() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            Task(priority: .userInitiated) {
+                do {
+                    self.currentRecorded = .init()
+                    let format = self.engine.inputNode.inputFormat(forBus: 0)
+                    self.engine.inputNode.installTap(onBus: 0,
+                                                     bufferSize: self.bufferSize,
+                                                     format: format) { (buffer, time) -> Void in
+                        self.currentRecorded = self.currentRecorded.append(buffer: buffer)
+                    }
+                    try self.engine.start()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
-            try? self.engine.start()
         }
     }
     
     func stopRecording() {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        Task {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
     }
     
     func getCurrentRecording() -> [Double]? {

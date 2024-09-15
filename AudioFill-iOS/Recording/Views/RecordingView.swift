@@ -22,6 +22,9 @@ struct RecordingView: View {
             case .full:
                 RecordingFullView()
                     .padding(.bottom, 600)
+            case .error(let error):
+                RecordingErrorView(error: error)
+                    .padding(.bottom, 600)
             }
             RecordingActionButtonView(isRecording: $viewModel.isRecording) {
                 viewModel.recordingButtonTap()
@@ -44,6 +47,12 @@ struct RecordingView: View {
 #Preview("Full") {
     var viewModel: RecordingViewModel = .init()
     viewModel.viewState = .full
+    return RecordingView(viewModel: viewModel)
+}
+
+#Preview("Error") {
+    var viewModel: RecordingViewModel = .init()
+    viewModel.viewState = .error(.audioProcessingFailure)
     return RecordingView(viewModel: viewModel)
 }
 
@@ -119,5 +128,27 @@ struct RecordingActionButtonView: View {
             }
         })
         .padding()
+    }
+}
+
+struct RecordingErrorView: View {
+    let error: RecordingViewModel.RecordingViewModelError
+    
+    var body: some View {
+        RecordingStateView(text: .constant(errorMessage), 
+                           background: .red)
+    }
+    
+    private var errorMessage: String {
+        switch error {
+        case .audioRecordingFailure:
+            return "Recording Failed"
+        case .audioProcessingFailure:
+            return "Audio Processing Failure"
+        case .predictionFailure:
+            return "Prediction Error"
+        case .unknownError:
+            return "Unknown Error"
+        }
     }
 }

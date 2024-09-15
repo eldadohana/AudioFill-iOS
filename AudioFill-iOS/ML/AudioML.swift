@@ -10,16 +10,16 @@ import CoreML
 import TensorFlowLite
 
 enum AudioMLError: Error {
+    case modelInitializationFailure
     case predictionFailure
 }
 
 class AudioML {
     private let modelName = "cnn_regression_v5"
-    private let queue = DispatchQueue(label: "audioML", qos: .userInteractive)
-    private var interpreter: Interpreter!
+    private var interpreter: Interpreter?
     
     init() {
-        queue.async {
+        Task(priority: .userInitiated) {
             self.interpreter = self.setupInterpreter()
         }
     }
@@ -27,6 +27,9 @@ class AudioML {
     func predictionForAudioBuffer(_ buffer: Data) async throws -> Float {
         return try await Task { () -> Float in
             do {
+                guard let interpreter = self.interpreter else {
+                    throw AudioMLError.modelInitializationFailure
+                }
                 try interpreter.copy(buffer, toInputAt: 0)
                 try interpreter.invoke()
                 
@@ -36,10 +39,8 @@ class AudioML {
                 let prediction: Float = outputData.withUnsafeBytes { pointer in
                     pointer.load(as: Float.self)
                 }
-                print("Prediction: \(prediction)")
                 return prediction
             } catch {
-                print("Error: \(error)")
                 throw AudioMLError.predictionFailure
             }
         }.result.get()
@@ -49,16 +50,15 @@ class AudioML {
 private extension AudioML {
     func setupInterpreter() -> Interpreter? {
         guard let modelPath = Bundle.main.path(forResource: modelName, ofType: "tflite") else {
-            fatalError("Model not found")
+            return nil
         }
         
         do {
             let interpreter = try Interpreter(modelPath: modelPath)
             try interpreter.allocateTensors()
             return interpreter
-        } catch let error {
-            print("Failed to create interpreter: \(error)")
+        } catch {
+            return nil
         }
-        return nil
     }
 }
